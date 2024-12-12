@@ -1,15 +1,14 @@
 #include "common.h"
 
 const char *TAG = "spiffs_t";
+esp_vfs_spiffs_conf_t conf;
 
 esp_err_t spiffs_init()
 {
-    esp_vfs_spiffs_conf_t conf = {
-      .base_path = "/spiffs",
-      .partition_label = NULL,
-      .max_files = 5,
-      .format_if_mount_failed = true
-    };
+    conf.base_path = "/spiffs";
+    conf.partition_label = NULL;
+    conf.max_files = 5;
+    conf.format_if_mount_failed = true;
 
         // Use settings defined above to initialize and mount SPIFFS filesystem.
     // Note: esp_vfs_spiffs_register is an all-in-one convenience function.
@@ -52,6 +51,11 @@ esp_err_t spiffs_init()
     return ESP_OK;
 }
 
+bool spiffs_ready()
+{
+    return esp_spiffs_mounted(conf.partition_label);
+}
+
 esp_err_t export_config(db_t *db, char *filename)
 {
     db_device_t *device;
@@ -80,5 +84,40 @@ esp_err_t export_config(db_t *db, char *filename)
 
 esp_err_t import_config(db_t *db, char *filename)
 {
+    char *buffer    = NULL;
+    char *ptr1      = NULL;
+    char *ptr2      = NULL;
+
+    uint32_t buffer_size = 0;
+
+    if (spiffs_ready() == false)
+    {
+        return ESP_FAIL;
+    }
+
+    FILE *fp = fopen(filename, "r");
+    // Check if the file is opened successfully
+    if (fp == NULL)
+    {
+        //printf("Error: cannot open file %s\n", file_name);
+        return ESP_FAIL;
+    }
+
+    buffer_size = fp->_lbfsize;
+    buffer = malloc(buffer_size);
+
+    fread(buffer, buffer_size, 1, fp);
+
+    buffer[buffer_size] = '\0';
+    ptr1 = buffer;
+    
+    fclose(fp);
+
+    if(ptr1[1] != vdb)
+    {
+        //update_db();
+    }
+    
+
     return ESP_OK;
 }
