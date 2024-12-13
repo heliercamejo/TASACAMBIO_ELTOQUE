@@ -46,4 +46,7 @@ esp_err_t spiffs_init();
 esp_err_t export_config(db_t *db, char *filename);
 esp_err_t import_config(db_t *db, char *filename);
 
+esp_err_t config_init();
+
+
 #endif //_COMMON_H_
