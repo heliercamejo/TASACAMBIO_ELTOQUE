@@ -1,4 +1,5 @@
 #include "common.h"
+#include "string.h"
 
 const char *TAG = "spiffs_t";
 esp_vfs_spiffs_conf_t conf;
@@ -76,6 +77,7 @@ esp_err_t export_config(db_t *db, char *filename)
     fprintf(fp, "\n"); // End the line
 
     fprintf(fp, "\nEND_CONFIG"); // End the line
+    ESP_LOGI(TAG, "EXPORT COMPLETE");
 
     // Close the file
     fclose(fp);
@@ -84,9 +86,14 @@ esp_err_t export_config(db_t *db, char *filename)
 
 esp_err_t import_config(db_t *db, char *filename)
 {
-    char *buffer    = NULL;
-    char *ptr1      = NULL;
-    char *ptr2      = NULL;
+    char *buffer        = NULL;
+    char *start_line    = NULL;
+    char *end_line      = NULL;
+    //char *component     = NULL;
+    char *buffer_cpy    = NULL;
+
+    uint32_t bufcpy_size = 0;
+    int value = 0;
 
     uint32_t buffer_size = 0;
 
@@ -102,22 +109,35 @@ esp_err_t import_config(db_t *db, char *filename)
         //printf("Error: cannot open file %s\n", file_name);
         return ESP_FAIL;
     }
+    ESP_LOGI(TAG,"file opened");
+    fseek(fp, 0L, SEEK_END);
+    buffer_size = ftell(fp);
+    fseek(fp, 0L, SEEK_SET);
 
-    buffer_size = fp->_lbfsize;
+    ESP_LOGI(TAG,"file_size : %lu", buffer_size);
+
     buffer = malloc(buffer_size);
 
     fread(buffer, buffer_size, 1, fp);
-
     buffer[buffer_size] = '\0';
-    ptr1 = buffer;
-    
     fclose(fp);
 
-    if(ptr1[1] != vdb)
+    start_line = buffer;
+    end_line = strchr(start_line, '\n') - 1; 
+    
+    bufcpy_size = end_line - start_line;
+    buffer_cpy = malloc(bufcpy_size);
+    memcpy(buffer_cpy,start_line,bufcpy_size);
+
+    buffer_cpy[bufcpy_size] = '\0';
+    sscanf(buffer_cpy,"v%d;",&value);
+    free(buffer_cpy);
+    
+    ESP_LOGI(TAG,"file_version : %d", value);
+
+    if(value != vdb)
     {
         //update_db();
     }
-    
-
     return ESP_OK;
 }
