@@ -8,6 +8,7 @@
 #include "esp_err.h"
 #include "esp_log.h"
 #include "esp_spiffs.h"
+#include "esp_mac.h"
 
 extern uint16_t vdb;
 extern uint16_t vfw;
@@ -21,7 +22,7 @@ typedef enum wifi_ap_e
 
 typedef struct db_device_t
 {
-    char mac[13];
+    char mac[20];
     char ssid[30];
     char password[30];
     wifi_ap_e type;
@@ -41,10 +42,18 @@ typedef struct db_t
     db_device_t *device_config;
 }db_t;
 
+extern db_t db_config;
 
 esp_err_t spiffs_init();
-esp_err_t export_config(db_t *db, char *filename);
-esp_err_t import_config(db_t *db, char *filename);
+bool spiffs_ready();
+esp_err_t export_config(db_t *db);
+esp_err_t import_config(db_t *db);
+bool check_config_file();
+esp_err_t remove_config();
+uint8_t get_next_value(char *s, long long *i, char *d, char delimiter);
+
+esp_err_t wifi_init();
+void get_mac(char *mac_address, wifi_ap_e type);
 
 esp_err_t config_init();
 
