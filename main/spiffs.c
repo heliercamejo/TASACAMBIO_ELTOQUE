@@ -4,6 +4,24 @@
 const char *TAG = "spiffs_t";
 esp_vfs_spiffs_conf_t conf;
 
+bool check_config_file()
+{
+    if(!spiffs_ready())
+    {
+        ESP_LOGI(TAG, "spiffs doesn't init");
+        return false;
+    }
+
+    struct stat st;
+    if (stat("/spiffs/foo.txt", &st) < 0)
+    {
+        ESP_LOGI(TAG, "error open file");
+        return false;
+    }
+
+    return true;
+}
+
 esp_err_t spiffs_init()
 {
     conf.base_path = "/spiffs";
@@ -57,87 +75,196 @@ bool spiffs_ready()
     return esp_spiffs_mounted(conf.partition_label);
 }
 
-esp_err_t export_config(db_t *db, char *filename)
+esp_err_t export_config(db_t *db)
 {
     db_device_t *device;
     
-    FILE *fp = fopen(filename, "w");
+    FILE *fp = fopen("/spiffs/device.cfg", "w");
 
-    fprintf(fp, "v%hu;\n", vdb);
-
-     // Write the contents of db_device
-    fprintf(fp, "db_device:");
+    // Write the contents of device
     device = db->device_config; // Get the first element of the linked list
     fprintf(fp,
-    "!%s,!%s,!%s,%hhu,%lu,%lu,%lu,%lu,!%s,%hhu,%hhd;",
+    "!%s,!%s,!%s,%hhu,%lu,%lu,%lu,%lu,!%s,%hhu,%hhd,",
     device->mac, device->ssid, device->password, device->type,
     device->lan_ip, device->lan_gw, device->lan_dns,
     device->lan_sn,
     device->time, device->dst, device->timezone);
     fprintf(fp, "\n"); // End the line
 
-    fprintf(fp, "\nEND_CONFIG"); // End the line
-    ESP_LOGI(TAG, "EXPORT COMPLETE");
-
     // Close the file
     fclose(fp);
     return ESP_OK;
 }
 
-esp_err_t import_config(db_t *db, char *filename)
+uint16_t file_size(FILE *fp)
 {
-    char *buffer        = NULL;
-    char *start_line    = NULL;
-    char *end_line      = NULL;
-    //char *component     = NULL;
-    char *buffer_cpy    = NULL;
+    uint16_t file_size = 0;
+    fseek(fp, 0L, SEEK_END);
+    file_size = ftell(fp);
+    fseek(fp, 0L, SEEK_SET);
+    return file_size;
+}
 
-    uint32_t bufcpy_size = 0;
+esp_err_t import_config(db_t *db)
+{
+    char *buffer=NULL,*start_line=NULL, *end_line=NULL,*buffer_cpy=NULL;
+    uint32_t bufcpy_size = 0, buffer_size = 0;
+    uint32_t r  = 0;
+    int64_t i;
     int value = 0;
 
-    uint32_t buffer_size = 0;
+    db_device_t *device;
+
+    device = malloc(sizeof(db_device_t));
 
     if (spiffs_ready() == false)
-    {
         return ESP_FAIL;
-    }
-
-    FILE *fp = fopen(filename, "r");
-    // Check if the file is opened successfully
+    
+    FILE *fp = fopen("/spiffs/device.cfg", "r");
     if (fp == NULL)
-    {
-        //printf("Error: cannot open file %s\n", file_name);
         return ESP_FAIL;
-    }
-    ESP_LOGI(TAG,"file opened");
-    fseek(fp, 0L, SEEK_END);
-    buffer_size = ftell(fp);
-    fseek(fp, 0L, SEEK_SET);
 
-    ESP_LOGI(TAG,"file_size : %lu", buffer_size);
-
+    buffer_size = file_size(fp);
     buffer = malloc(buffer_size);
-
     fread(buffer, buffer_size, 1, fp);
     buffer[buffer_size] = '\0';
     fclose(fp);
 
     start_line = buffer;
     end_line = strchr(start_line, '\n') - 1; 
-    
-    bufcpy_size = end_line - start_line;
-    buffer_cpy = malloc(bufcpy_size);
-    memcpy(buffer_cpy,start_line,bufcpy_size);
+    buffer_cpy = buffer;
 
-    buffer_cpy[bufcpy_size] = '\0';
-    sscanf(buffer_cpy,"v%d;",&value);
-    free(buffer_cpy);
-    
-    ESP_LOGI(TAG,"file_version : %d", value);
+    //device mac
+    r = get_next_value(++buffer_cpy, &i, device->mac, ',');
+    if (r)
+    {
+        buffer_cpy += r;
+    }
 
+    r = get_next_value(++buffer_cpy, &i, device->ssid, ',');
+    if (r)
+    {
+        buffer_cpy += r;
+    }
+
+    r = get_next_value(++buffer_cpy, &i, device->password, ',');
+    if (r)
+    {
+        buffer_cpy += r;
+    }
+
+    r = get_next_value(buffer_cpy, &i, NULL, ',');
+    if (r)
+    {
+        device->type = i;
+        buffer_cpy += r;
+    }
+    r = get_next_value(buffer_cpy, &i, NULL, ',');
+    if (r)
+    {
+        device->lan_ip = i;
+        buffer_cpy += r;
+    }
+    r = get_next_value(buffer_cpy, &i, NULL, ',');
+    if (r)
+    {
+        device->lan_gw = i;
+        buffer_cpy += r;
+    }
+    r = get_next_value(buffer_cpy, &i, NULL, ',');
+    if (r)
+    {
+        device->lan_dns = i;
+        buffer_cpy += r;
+    }
+    r = get_next_value(buffer_cpy, &i, NULL, ',');
+    if (r)
+    {
+        device->lan_sn = i;
+        buffer_cpy += r;
+    }
+    
+    r = get_next_value(++buffer_cpy, &i, device->time, ',');
+    if (r)
+    {
+        buffer_cpy += r;
+    }
+    r = get_next_value(buffer_cpy, &i, NULL, ',');
+    if (r)
+    {
+        device->dst = i;
+        buffer_cpy += r;
+    }
+    r = get_next_value(buffer_cpy, &i, NULL, ',');
+    if (r)
+    {
+        device->timezone = i;
+        buffer_cpy += r;
+    }
+
+    ESP_LOGI(TAG,"device\nmac:%s\nssid:%s\npassword:%s\ntype:%s\n",
+    device->mac, device->ssid, device->password, (device->type == SOFT_AP)?"SOFT_AP": "STATIC");
+
+    free(buffer);
     if(value != vdb)
     {
         //update_db();
     }
+    return ESP_OK;
+}
+
+uint8_t get_next_value(char *s, long long *i, char *d, char delimiter)
+{
+    char *p;
+    int length = 0;
+
+    p = strchr(s, delimiter);
+    if (p == NULL)
+    {
+        length = strlen(s);
+        strncpy(d, s, length);
+        d[length] = '\0';
+    }
+    else
+    {
+        length = p - s;
+        if (d)
+        {
+            strncpy(d, s, length);
+            d[length] = '\0';
+        }
+        else
+        {
+            *i = atoi(s);
+        }
+    }
+    p = strchr(s, delimiter);
+    if (p == NULL)
+    {
+        length = strlen(s);
+        strncpy(d, s, length);
+        d[length] = '\0';
+    }
+    else
+    {
+        length = p - s;
+        if (d)
+        {
+            strncpy(d, s, length);
+            d[length] = '\0';
+        }
+        else
+        {
+            *i = atoi(s);
+        }
+    }
+
+    return length + 1;
+}
+
+esp_err_t remove_config()
+{
+    unlink("/spiffs/device.cfg");
+    ESP_LOGI(TAG, "File remove");
     return ESP_OK;
 }
